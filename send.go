@@ -1,8 +1,8 @@
 package mail
 
 import (
-	"errors"
 	"fmt"
+	"github.com/pkg/errors"
 	"io"
 	stdmail "net/mail"
 )

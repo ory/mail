@@ -2,7 +2,7 @@ package mail
 
 import (
 	"bytes"
-	"errors"
+	"github.com/pkg/errors"
 	"io"
 	"reflect"
 	"testing"

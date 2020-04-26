@@ -2,7 +2,7 @@ package mail
 
 import (
 	"encoding/base64"
-	"errors"
+	"github.com/pkg/errors"
 	"io"
 	"mime"
 	"mime/multipart"
