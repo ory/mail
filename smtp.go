@@ -8,6 +8,8 @@ import (
 	"net/smtp"
 	"strings"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 // A Dialer is a dialer to an SMTP server.
@@ -79,10 +81,17 @@ var NetDialTimeout = net.DialTimeout
 // Dial dials and authenticates to an SMTP server. The returned SendCloser
 // should be closed when done using it.
 func (d *Dialer) Dial() (SendCloser, error) {
+	if d.Timeout == 0 {
+		d.Timeout = time.Second * 10
+	}
+
 	conn, err := NetDialTimeout("tcp", addr(d.Host, d.Port), d.Timeout)
 	if err != nil {
-		return nil, err
+		return nil, errors.WithStack(err)
 	}
+
+	deadline := time.Now().Add(d.Timeout)
+	_ = conn.SetDeadline(deadline)
 
 	if d.SSL {
 		conn = tlsClient(conn, d.tlsConfig())
@@ -91,10 +100,6 @@ func (d *Dialer) Dial() (SendCloser, error) {
 	c, err := smtpNewClient(conn, d.Host)
 	if err != nil {
 		return nil, err
-	}
-
-	if d.Timeout > 0 {
-		conn.SetDeadline(time.Now().Add(d.Timeout))
 	}
 
 	if d.LocalName != "" {

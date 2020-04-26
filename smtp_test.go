@@ -9,6 +9,8 @@ import (
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -265,10 +267,7 @@ func TestDialerTimeoutNoRetry(t *testing.T) {
 		"Mail " + testFrom,
 		"Quit",
 	})
-
-	if err.Error() != "gomail: could not send email 1: EOF" {
-		t.Error("expected to have got EOF, but got:", err)
-	}
+	require.EqualError(t, err, "gomail: could not send email 1: EOF")
 }
 
 type mockClient struct {
@@ -378,9 +377,7 @@ func testSendMail(t *testing.T, d *Dialer, want []string) {
 		timeout:  false,
 	}
 
-	if err := doTestSendMail(t, d, testClient, want); err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, doTestSendMail(t, d, testClient, want))
 }
 
 func testSendMailStartTLSUnsupported(t *testing.T, d *Dialer, want []string) {
@@ -392,9 +389,7 @@ func testSendMailStartTLSUnsupported(t *testing.T, d *Dialer, want []string) {
 		timeout:  false,
 	}
 
-	if err := doTestSendMail(t, d, testClient, want); err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, doTestSendMail(t, d, testClient, want))
 }
 
 func testSendMailTimeout(t *testing.T, d *Dialer, want []string) {
@@ -406,30 +401,21 @@ func testSendMailTimeout(t *testing.T, d *Dialer, want []string) {
 		timeout:  true,
 	}
 
-	if err := doTestSendMail(t, d, testClient, want); err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, doTestSendMail(t, d, testClient, want))
 }
 
 func doTestSendMail(t *testing.T, d *Dialer, testClient *mockClient, want []string) error {
 	testClient.want = want
 
 	NetDialTimeout = func(network, address string, d time.Duration) (net.Conn, error) {
-		if network != "tcp" {
-			t.Errorf("Invalid network, got %q, want tcp", network)
-		}
-		if address != testClient.addr {
-			t.Errorf("Invalid address, got %q, want %q",
-				address, testClient.addr)
-		}
+		require.Equal(t, "tcp", network)
+		require.Equal(t, testClient.addr, address)
 		return testConn, nil
 	}
 
 	tlsClient = func(conn net.Conn, config *tls.Config) *tls.Conn {
-		if conn != testConn {
-			t.Errorf("Invalid conn, got %#v, want %#v", conn, testConn)
-		}
-		assertConfig(t, config, testClient.config)
+		require.Equal(t, conn, testConn)
+		assertConfig(t, testClient.config, config)
 		return testTLSConn
 	}
 
@@ -437,6 +423,7 @@ func doTestSendMail(t *testing.T, d *Dialer, testClient *mockClient, want []stri
 		if host != testHost {
 			t.Errorf("Invalid host, got %q, want %q", host, testHost)
 		}
+		require.Equal(t, testHost, host)
 		return testClient, nil
 	}
 
