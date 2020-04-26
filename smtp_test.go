@@ -414,8 +414,8 @@ func doTestSendMail(t *testing.T, d *Dialer, testClient *mockClient, want []stri
 	}
 
 	tlsClient = func(conn net.Conn, config *tls.Config) *tls.Conn {
-		require.Equal(t, conn, testConn)
-		assertConfig(t, testClient.config, config)
+		require.Equal(t, testConn, conn)
+		assertConfig(t, config, testClient.config)
 		return testTLSConn
 	}
 
