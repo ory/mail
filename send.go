@@ -1,10 +1,10 @@
 package mail
 
 import (
-	"fmt"
-	"github.com/pkg/errors"
 	"io"
 	stdmail "net/mail"
+
+	"github.com/pkg/errors"
 )
 
 // Sender is the interface that wraps the Send method.
@@ -110,7 +110,7 @@ func addAddress(list []string, addr string) []string {
 func parseAddress(field string) (string, error) {
 	addr, err := stdmail.ParseAddress(field)
 	if err != nil {
-		return "", fmt.Errorf("gomail: invalid address %q: %v", field, err)
+		return "", errors.Errorf("gomail: invalid address %q: %v", field, err)
 	}
 	return addr.Address, nil
 }
