@@ -258,6 +258,11 @@ func (w *messageWriter) writeHeaders(h map[string][]string) {
 }
 
 func (w *messageWriter) writeBody(f func(io.Writer) error, enc Encoding) {
+	if f == nil {
+		w.err = errors.New("writeBody: expected writer to be defined but got nil")
+		return
+	}
+
 	var subWriter io.Writer
 	if w.depth == 0 {
 		w.writeString("\r\n")
