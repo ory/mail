@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func init() {
@@ -23,6 +25,13 @@ type message struct {
 	from    string
 	to      []string
 	content string
+}
+
+func TestHeader(t *testing.T) {
+	original := []string{"foo!", "¡bar", "señor"}
+	m := NewMessage()
+	m.SetHeader("Subject", original...)
+	assert.Equal(t, []string{"foo!", "¡bar", "señor"}, original)
 }
 
 func TestMessage(t *testing.T) {
