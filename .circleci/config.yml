@@ -9,3 +9,8 @@ jobs:
       - checkout
       - setup_remote_docker
       - run: go test ./...
+
+workflows:
+  test:
+    jobs:
+      - test
