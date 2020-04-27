@@ -1,6 +1,7 @@
 package mail_test
 
 import (
+	"context"
 	"fmt"
 	"html/template"
 	"io"
@@ -23,7 +24,7 @@ func Example() {
 	d.StartTLSPolicy = mail.MandatoryStartTLS
 
 	// Send the email to Bob, Cora and Dan.
-	if err := d.DialAndSend(m); err != nil {
+	if err := d.DialAndSend(context.Background(), m); err != nil {
 		panic(err)
 	}
 }
@@ -46,12 +47,12 @@ func Example_daemon() {
 					return
 				}
 				if !open {
-					if s, err = d.Dial(); err != nil {
+					if s, err = d.Dial(context.Background()); err != nil {
 						panic(err)
 					}
 					open = true
 				}
-				if err := mail.Send(s, m); err != nil {
+				if err := mail.Send(context.Background(), s, m); err != nil {
 					log.Print(err)
 				}
 			// Close the connection to the SMTP server if no email was sent in
@@ -83,7 +84,7 @@ func Example_newsletter() {
 
 	d := mail.NewDialer("smtp.example.com", 587, "user", "123456")
 	d.StartTLSPolicy = mail.MandatoryStartTLS
-	s, err := d.Dial()
+	s, err := d.Dial(context.Background())
 	if err != nil {
 		panic(err)
 	}
@@ -95,7 +96,7 @@ func Example_newsletter() {
 		m.SetHeader("Subject", "Newsletter #1")
 		m.SetBody("text/html", fmt.Sprintf("Hello %s!", r.Name))
 
-		if err := mail.Send(s, m); err != nil {
+		if err := mail.Send(context.Background(), s, m); err != nil {
 			log.Printf("Could not send email to %q: %v", r.Address, err)
 		}
 		m.Reset()
@@ -111,7 +112,7 @@ func Example_noAuth() {
 	m.SetBody("text/plain", "Hello!")
 
 	d := mail.Dialer{Host: "localhost", Port: 587}
-	if err := d.DialAndSend(m); err != nil {
+	if err := d.DialAndSend(context.Background(), m); err != nil {
 		panic(err)
 	}
 }
@@ -124,7 +125,7 @@ func Example_noSMTP() {
 	m.SetHeader("Subject", "Hello!")
 	m.SetBody("text/plain", "Hello!")
 
-	s := mail.SendFunc(func(from string, to []string, msg io.WriterTo) error {
+	s := mail.SendFunc(func(ctx context.Context, from string, to []string, msg io.WriterTo) error {
 		// Implements you email-sending function, for example by calling
 		// an API, or running postfix, etc.
 		fmt.Println("From:", from)
@@ -132,7 +133,7 @@ func Example_noSMTP() {
 		return nil
 	})
 
-	if err := mail.Send(s, m); err != nil {
+	if err := mail.Send(context.Background(), s, m); err != nil {
 		panic(err)
 	}
 	// Output:

@@ -47,7 +47,7 @@ package main
 import (
 	"crypto/tls"
 
-	"gopkg.in/mail.v2"
+	"github.com/ory/mail"
 )
 
 func main() {

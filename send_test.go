@@ -2,10 +2,12 @@ package mail
 
 import (
 	"bytes"
-	"github.com/pkg/errors"
+	"context"
 	"io"
 	"reflect"
 	"testing"
+
+	"github.com/pkg/errors"
 )
 
 const (
@@ -25,8 +27,8 @@ const (
 
 type mockSender SendFunc
 
-func (s mockSender) Send(from string, to []string, msg io.WriterTo) error {
-	return s(from, to, msg)
+func (s mockSender) Send(ctx context.Context, from string, to []string, msg io.WriterTo) error {
+	return s(ctx, from, to, msg)
 }
 
 type mockSendCloser struct {
@@ -46,19 +48,19 @@ func TestSend(t *testing.T) {
 			return nil
 		},
 	}
-	if err := Send(s, getTestMessage()); err != nil {
+	if err := Send(context.Background(), s, getTestMessage()); err != nil {
 		t.Errorf("Send(): %v", err)
 	}
 }
 
 func TestSendError(t *testing.T) {
 	s := &mockSendCloser{
-		mockSender: func(_ string, _ []string, _ io.WriterTo) error {
+		mockSender: func(_ context.Context, _ string, _ []string, _ io.WriterTo) error {
 			return errors.New("kaboom")
 		},
 	}
 	wantErr := "gomail: could not send email 1: kaboom"
-	if err := Send(s, getTestMessage()); err == nil || err.Error() != wantErr {
+	if err := Send(context.Background(), s, getTestMessage()); err == nil || err.Error() != wantErr {
 		t.Errorf("expected Send() error, got %q, want %q", err, wantErr)
 	}
 }
@@ -73,7 +75,7 @@ func getTestMessage() *Message {
 }
 
 func stubSend(t *testing.T, wantFrom string, wantTo []string, wantBody string) mockSender {
-	return func(from string, to []string, msg io.WriterTo) error {
+	return func(ctx context.Context, from string, to []string, msg io.WriterTo) error {
 		if from != wantFrom {
 			t.Errorf("invalid from, got %q, want %q", from, wantFrom)
 		}
