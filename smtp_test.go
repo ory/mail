@@ -2,6 +2,7 @@ package mail
 
 import (
 	"bytes"
+	"context"
 	"crypto/tls"
 	"io"
 	"net"
@@ -427,7 +428,7 @@ func doTestSendMail(t *testing.T, d *Dialer, testClient *mockClient, want []stri
 		return testClient, nil
 	}
 
-	return d.DialAndSend(getTestMessage())
+	return d.DialAndSend(context.Background(), getTestMessage())
 }
 
 func assertConfig(t *testing.T, got, want *tls.Config) {

@@ -2,6 +2,7 @@ package mail
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"io"
 	"io/ioutil"
@@ -683,14 +684,14 @@ func TestEmptyHeader(t *testing.T) {
 }
 
 func testMessage(t *testing.T, m *Message, bCount int, want *message) {
-	err := Send(stubSendMail(t, bCount, want), m)
+	err := Send(context.Background(), stubSendMail(t, bCount, want), m)
 	if err != nil {
 		t.Error(err)
 	}
 }
 
 func stubSendMail(t *testing.T, bCount int, want *message) SendFunc {
-	return func(from string, to []string, m io.WriterTo) error {
+	return func(ctx context.Context, from string, to []string, m io.WriterTo) error {
 		if from != want.from {
 			t.Fatalf("Invalid from, got %q, want %q", from, want.from)
 		}
@@ -807,7 +808,7 @@ func mockCopyFileWithHeader(m *Message, name string, h map[string][]string) (str
 }
 
 func BenchmarkFull(b *testing.B) {
-	discardFunc := SendFunc(func(from string, to []string, m io.WriterTo) error {
+	discardFunc := SendFunc(func(ctx context.Context, from string, to []string, m io.WriterTo) error {
 		_, err := m.WriteTo(ioutil.Discard)
 		return err
 	})
@@ -827,7 +828,7 @@ func BenchmarkFull(b *testing.B) {
 		m.Attach(mockCopyFile("benchmark.txt"))
 		m.Embed(mockCopyFile("benchmark.jpg"))
 
-		if err := Send(discardFunc, m); err != nil {
+		if err := Send(context.Background(), discardFunc, m); err != nil {
 			panic(err)
 		}
 		m.Reset()
