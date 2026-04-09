@@ -50,6 +50,8 @@ type Dialer struct {
 	// Whether we should retry mailing if the connection returned an error,
 	// defaults to true.
 	RetryFailure bool
+	// DialFunc specifies the function to use to establish a connection to the SMTP server.
+	DialFunc func(ctx context.Context, network, address string) (net.Conn, error)
 }
 
 // NewDialer returns a new SMTP Dialer. The given parameters are used to connect
@@ -86,13 +88,21 @@ func (d *Dialer) Dial(ctx context.Context) (SendCloser, error) {
 		d.Timeout = time.Second * 10
 	}
 
-	nd := &net.Dialer{Timeout: d.Timeout}
-	conn, err := nd.DialContext(ctx, "tcp", addr(d.Host, d.Port))
+	deadline := time.Now().Add(d.Timeout)
+	ctx, cancel := context.WithDeadline(ctx, deadline)
+	defer cancel()
+
+	dial := d.DialFunc
+	if dial == nil {
+		nd := net.Dialer{Timeout: d.Timeout}
+		dial = nd.DialContext
+	}
+
+	conn, err := dial(ctx, "tcp", addr(d.Host, d.Port))
 	if err != nil {
 		return nil, errors.WithStack(err)
 	}
 
-	deadline := time.Now().Add(d.Timeout)
 	_ = conn.SetDeadline(deadline)
 
 	if d.SSL {
