@@ -8,6 +8,7 @@ import (
 	"net"
 	"net/smtp"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/pkg/errors"
@@ -83,13 +84,18 @@ var NetDialTimeout = net.DialTimeout
 
 // Dial dials and authenticates to an SMTP server. The returned SendCloser
 // should be closed when done using it.
+//
+// Dial stops when ctx is done or after Timeout, whichever comes first. The same
+// applies to each Send on the returned SendCloser with the ctx passed to Send.
+// When ctx ends Dial or Send, the returned error matches ctx.Err() under
+// errors.Is, and the connection is closed.
 func (d *Dialer) Dial(ctx context.Context) (SendCloser, error) {
 	if d.Timeout == 0 {
 		d.Timeout = time.Second * 10
 	}
 
 	deadline := time.Now().Add(d.Timeout)
-	ctx, cancel := context.WithDeadline(ctx, deadline)
+	dialCtx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 
 	dial := d.DialFunc
@@ -98,13 +104,28 @@ func (d *Dialer) Dial(ctx context.Context) (SendCloser, error) {
 		dial = nd.DialContext
 	}
 
-	conn, err := dial(ctx, "tcp", addr(d.Host, d.Port))
+	conn, err := dial(dialCtx, "tcp", addr(d.Host, d.Port))
 	if err != nil {
-		return nil, errors.WithStack(err)
+		return nil, errors.WithStack(contextError(ctx, err))
 	}
 
 	_ = conn.SetDeadline(deadline)
 
+	stop := closeOnDone(ctx, conn)
+	c, err := d.handshake(conn)
+	if stop() && err == nil {
+		// (*smtp.Client).Extension discards I/O errors, so the handshake can
+		// appear to succeed on a connection that ctx closed.
+		err = ctx.Err()
+	}
+	if err != nil {
+		return nil, contextError(ctx, err)
+	}
+
+	return &smtpSender{c, conn, d}, nil
+}
+
+func (d *Dialer) handshake(conn net.Conn) (smtpClient, error) {
 	if d.SSL {
 		conn = tlsClient(conn, d.tlsConfig())
 	}
@@ -160,7 +181,7 @@ func (d *Dialer) Dial(ctx context.Context) (SendCloser, error) {
 		}
 	}
 
-	return &smtpSender{c, conn, d}, nil
+	return c, nil
 }
 
 func (d *Dialer) tlsConfig() *tls.Config {
@@ -246,12 +267,18 @@ func (c *smtpSender) retryError(err error) bool {
 }
 
 func (c *smtpSender) Send(ctx context.Context, from string, to []string, msg io.WriterTo) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	if c.d.Timeout > 0 {
 		c.conn.SetDeadline(time.Now().Add(c.d.Timeout))
 	}
 
+	stop := closeOnDone(ctx, c.conn)
 	if err := c.Mail(from); err != nil {
-		if c.retryError(err) {
+		stop()
+		if ctx.Err() == nil && c.retryError(err) {
 			// This is probably due to a timeout, so reconnect and try again.
 			sc, derr := c.d.Dial(ctx)
 			if derr == nil {
@@ -262,9 +289,15 @@ func (c *smtpSender) Send(ctx context.Context, from string, to []string, msg io.
 			}
 		}
 
-		return err
+		return contextError(ctx, err)
 	}
 
+	err := c.transmit(to, msg)
+	stop()
+	return contextError(ctx, err)
+}
+
+func (c *smtpSender) transmit(to []string, msg io.WriterTo) error {
 	for _, addr := range to {
 		if err := c.Rcpt(addr); err != nil {
 			return err
@@ -286,6 +319,34 @@ func (c *smtpSender) Send(ctx context.Context, from string, to []string, msg io.
 
 func (c *smtpSender) Close() error {
 	return c.Quit()
+}
+
+// closeOnDone closes conn as soon as ctx is done, which aborts any read or write
+// in progress on it. The returned function stops watching ctx and reports
+// whether ctx closed conn, in which case it returns once conn is closed.
+func closeOnDone(ctx context.Context, conn net.Conn) (stop func() bool) {
+	closed := make(chan struct{})
+	stopWatching := context.AfterFunc(ctx, func() {
+		_ = conn.Close()
+		close(closed)
+	})
+	return sync.OnceValue(func() bool {
+		if stopWatching() {
+			return false
+		}
+		<-closed
+		return true
+	})
+}
+
+// contextError makes a non-nil err also match ctx.Err() under errors.Is when
+// ctx is done.
+func contextError(ctx context.Context, err error) error {
+	ctxErr := ctx.Err()
+	if err == nil || ctxErr == nil || errors.Is(err, ctxErr) {
+		return err
+	}
+	return fmt.Errorf("%w: %w", ctxErr, err)
 }
 
 // Stubbed out for tests.
