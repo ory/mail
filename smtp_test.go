@@ -9,7 +9,6 @@ import (
 	"net/smtp"
 	"reflect"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -408,11 +407,14 @@ func testSendMailTimeout(t *testing.T, d *Dialer, want []string) {
 func doTestSendMail(t *testing.T, d *Dialer, testClient *mockClient, want []string) error {
 	testClient.want = want
 
-	NetDialTimeout = func(network, address string, d time.Duration) (net.Conn, error) {
+	d.DialFunc = func(_ context.Context, network, address string) (net.Conn, error) {
 		require.Equal(t, "tcp", network)
 		require.Equal(t, testClient.addr, address)
 		return testConn, nil
 	}
+
+	origTLSClient, origSMTPNewClient := tlsClient, smtpNewClient
+	t.Cleanup(func() { tlsClient, smtpNewClient = origTLSClient, origSMTPNewClient })
 
 	tlsClient = func(conn net.Conn, config *tls.Config) *tls.Conn {
 		require.Equal(t, testConn, conn)
@@ -428,7 +430,7 @@ func doTestSendMail(t *testing.T, d *Dialer, testClient *mockClient, want []stri
 		return testClient, nil
 	}
 
-	return d.DialAndSend(context.Background(), getTestMessage())
+	return d.DialAndSend(t.Context(), getTestMessage())
 }
 
 func assertConfig(t *testing.T, got, want *tls.Config) {
